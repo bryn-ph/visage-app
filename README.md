@@ -1,7 +1,12 @@
-# Tauri + React + Typescript
+Visage is a lightweight, desktop music visualizer built with a canvas-based visualizer to react to your music in real-time.
 
-This template should help get you started developing with Tauri, React and Typescript in Vite.
+# Tech Stack
 
-## Recommended IDE Setup
+- Frontend: 
+    - React + TypeScript + Tailwind CSS
 
-- [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
+- Backend / Desktop Wrapper:
+    - Tauri (Rust)
+
+- Build Tool:
+    - Vite
