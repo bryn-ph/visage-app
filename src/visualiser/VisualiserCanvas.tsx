@@ -6,9 +6,10 @@ export default function VisualiserCanvas() {
     const audioRef = useRef<AudioEngine | null>(null);
 
     // CONFIG variables
-    const smoothingFactor = 0.1; // smoothing factor for exponential smoothing (0 to 1)
-    const barWidth = 4; // width of each frequency bar in pixels
-    const barSpacing = 2; // spacing between bars in pixels    
+    const SMOOTHING_FACTOR = 0.15; // smoothing factor for exponential smoothing (0 to 1)
+    const BAR_WIDTH = 4; // width of each frequency bar in pixels
+    const BAR_SPACING = 2; // spacing between bars in pixels    
+    const BAR_HEIGHT = 0.9; // multiplier for bar height scaling
 
     // handle user action to connect system audio
     const handleConnectAudio = () => {
@@ -20,9 +21,9 @@ export default function VisualiserCanvas() {
     // create gradient for bars
     const createGradient = (ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) => {
         const gradient = ctx.createLinearGradient(0, canvas.height, 0, 0);
-        gradient.addColorStop(0, "rgba(15,23,42,0.8)");
-        gradient.addColorStop(0.5, "rgba(56,189,248,0.6)");
-        gradient.addColorStop(1, "rgba(255,255,255,0.5)");
+        gradient.addColorStop(0, "rgba(15,23,42,0.8)"); // dark blue
+        gradient.addColorStop(0.5, "rgba(56,189,248,0.6)"); // light blue
+        gradient.addColorStop(1, "rgba(255,255,255,0.5)"); // white
         return gradient;
     };
 
@@ -55,7 +56,7 @@ export default function VisualiserCanvas() {
             // apply exponential smoothing
             for (let i = 0; i < data.length; i++) {
                 smoothedData[i] =
-                    smoothingFactor * data[i] + (1 - smoothingFactor) * smoothedData[i];
+                    SMOOTHING_FACTOR * data[i] + (1 - SMOOTHING_FACTOR) * smoothedData[i];
             }
 
             // clear canvas
@@ -64,10 +65,10 @@ export default function VisualiserCanvas() {
             // draw bars
             smoothedData.forEach((value, i) => {
                 const normalized = value / 255;
-                const height = Math.pow(normalized, 0.5) * canvas.height;
+                const height = Math.pow(normalized, 0.5) * canvas.height * BAR_HEIGHT;
 
                 ctx.fillStyle = gradient;
-                ctx.fillRect(i * (barWidth + barSpacing), canvas.height - height, barWidth, height);
+                ctx.fillRect(i * (BAR_WIDTH + BAR_SPACING), canvas.height - height, BAR_WIDTH, height);
             });
         };
 
