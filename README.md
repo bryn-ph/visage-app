@@ -1,6 +1,6 @@
 # Visage Widget
 
-Visage is a lightweight, desktop music visualizer built with a canvas-based visualizer to react to your music in real-time.
+Visage is a lightweight, desktop music visualiser built with a canvas-based visualiser to react to your music in real-time.
 
 ## Tech Stack
 

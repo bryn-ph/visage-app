@@ -1,15 +1,13 @@
 import "./App.css";
-import Titlebar from "./components/titlebar";
+import Titlebar from "./components/Titlebar";
+import VisualiserCanvas from "./visualiser/VisualiserCanvas";
 
 function App() {
 
-  // Music visualizer will go here
   return (
     <main className="w-full h-full relative">
       <Titlebar />
-      <div className="h-full w-full flex items-center justify-center pt-10">
-        <h1 className="text-black text-3xl">Visage App</h1>
-      </div>
+      <VisualiserCanvas />
 
     </main>
 
