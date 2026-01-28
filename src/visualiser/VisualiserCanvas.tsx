@@ -1,48 +1,108 @@
 import { useEffect, useRef } from "react";
 import { AudioEngine } from "../audio/AudioEngine";
 
-// canvas component for audio visualisation
 export default function VisualiserCanvas() {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const audioRef = useRef<AudioEngine | null>(null);
 
-    // setup canvas and audio on mount
+    // CONFIG variables
+    const smoothingFactor = 0.1; // smoothing factor for exponential smoothing (0 to 1)
+    const barWidth = 4; // width of each frequency bar in pixels
+    const barSpacing = 2; // spacing between bars in pixels    
+
+    // handle user action to connect system audio
+    const handleConnectAudio = () => {
+        if (audioRef.current) {
+            audioRef.current.connectSystemAudio();
+        }
+    };
+
+    // create gradient for bars
+    const createGradient = (ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) => {
+        const gradient = ctx.createLinearGradient(0, canvas.height, 0, 0);
+        gradient.addColorStop(0, "rgba(15,23,42,0.8)");
+        gradient.addColorStop(0.5, "rgba(56,189,248,0.6)");
+        gradient.addColorStop(1, "rgba(255,255,255,0.5)");
+        return gradient;
+    };
+
+    // resize canvas to fill parent container
+    const resize = (canvas: HTMLCanvasElement) => {
+        const parent = canvas.parentElement!;
+        canvas.width = parent.clientWidth;
+        canvas.height = parent.clientHeight;
+    };
+
     useEffect(() => {
-        const canvas = canvasRef.current!;
-        const ctx = canvas.getContext("2d")!;
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
+        const canvas = canvasRef.current!; // get canvas element
+        const ctx = canvas.getContext("2d")!; // get 2D rendering context
+        const audio = new AudioEngine(); // create audio engine instance
 
-        // initialise audio engine
-        // can replace with audio file or other source later
-        const audio = new AudioEngine();
+        // initial resize
+        resize(canvas);
+        window.addEventListener("resize", () => resize(canvas));
+
+        // store audio engine in ref
         audioRef.current = audio;
+        const smoothedData = new Float32Array(audio.analyser.frequencyBinCount);
 
-        // connect to microphone
-        audio.connectMicrophone();
-
-        // render loop
         const render = () => {
             requestAnimationFrame(render);
-            const data = audio.getFrequencyData();
 
+            const data = audio.getFrequencyData();
+            const gradient = createGradient(ctx, canvas);
+
+            // apply exponential smoothing
+            for (let i = 0; i < data.length; i++) {
+                smoothedData[i] =
+                    smoothingFactor * data[i] + (1 - smoothingFactor) * smoothedData[i];
+            }
+
+            // clear canvas
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            const barWidth = canvas.width / data.length;
-            data.forEach((value, i) => {
-                const height = value * 2;
-                ctx.fillStyle = "CanvasGradient";
-                ctx.fillRect(
-                    i * barWidth,
-                    canvas.height - height,
-                    barWidth,
-                    height
-                );
+            // draw bars
+            smoothedData.forEach((value, i) => {
+                const normalized = value / 255;
+                const height = Math.pow(normalized, 0.5) * canvas.height;
+
+                ctx.fillStyle = gradient;
+                ctx.fillRect(i * (barWidth + barSpacing), canvas.height - height, barWidth, height);
             });
         };
 
         render();
+
+        return () => window.removeEventListener("resize", () => resize(canvas));
     }, []);
 
-    return <canvas ref={canvasRef} className="absolute inset-0" />;
+    return (
+        <>
+            <canvas
+                ref={canvasRef}
+                className="absolute inset-0 block"
+            />
+            <button
+                onClick={handleConnectAudio}
+                className="
+                absolute
+                top-12
+                right-4
+                z-60
+                rounded-lg
+                bg-white/20
+                px-4
+                py-2
+                text-sm
+                font-medium
+                text-white
+                backdrop-blur-md
+                hover:bg-white/30
+                transition
+                "
+            >
+                Share System Audio
+            </button>
+        </>
+    );
 }

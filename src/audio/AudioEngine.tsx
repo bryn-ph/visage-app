@@ -4,6 +4,17 @@ export class AudioEngine {
     audioContext: AudioContext;
     analyser: AnalyserNode;
     dataArray: Uint8Array<ArrayBuffer>;
+    displayMediaOptions = {
+        video: {
+            displaySurface: "browser",
+        },
+        audio: true,
+        preferCurrentTab: false,
+        selfBrowserSurface: "exclude",
+        systemAudio: "include",
+        surfaceSwitching: "include",
+        monitorTypeSurfaces: "include",
+    };
 
     // initialise audio context and analyser
     constructor() {
@@ -15,9 +26,19 @@ export class AudioEngine {
         this.dataArray = new Uint8Array(bufferLength);
     }
 
-    // connect to microphone input
-    async connectMicrophone() {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    // ask for displayMedia access and connect system audio
+    async connectSystemAudio() {
+        async function startCapture(displayMediaOptions: DisplayMediaStreamOptions) {
+            let captureStream: MediaStream;
+            try {
+                captureStream = await (navigator.mediaDevices as any).getDisplayMedia(displayMediaOptions);
+                return captureStream;
+            } catch (err) {
+                console.error("Error: " + err);
+                throw err;
+            }
+        }
+        const stream = await startCapture(this.displayMediaOptions);
         const source = this.audioContext.createMediaStreamSource(stream);
         source.connect(this.analyser);
     }
