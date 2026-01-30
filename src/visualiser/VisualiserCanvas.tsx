@@ -298,7 +298,7 @@ export default function VisualiserCanvas() {
           "
                 >
                     <div className="flex items-center justify-between mb-3">
-                        <div className="text-sm font-semibold">Visualizer Settings</div>
+                        <div className="text-sm font-semibold">Visualiser Settings</div>
                         <button
                             onClick={() => setConfig(DEFAULTS)}
                             className="text-xs text-white/70 hover:text-white transition"
