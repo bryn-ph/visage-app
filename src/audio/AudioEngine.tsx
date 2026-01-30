@@ -6,6 +6,7 @@ export class AudioEngine {
     constructor() {
         this.audioContext = new AudioContext();
         this.analyser = this.audioContext.createAnalyser();
+        this.analyser.smoothingTimeConstant = 0.8;
         this.analyser.fftSize = 2048;
         this.dataArray = new Uint8Array(
             new ArrayBuffer(this.analyser.frequencyBinCount)
@@ -17,7 +18,6 @@ export class AudioEngine {
             this.audioContext.resume();
         }
 
-        // 🔑 Normalize here
         const normalized = new Float32Array(
             new ArrayBuffer(samples.byteLength)
         );
