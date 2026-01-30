@@ -1,6 +1,8 @@
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use tauri::Emitter;
 
+const BATCH_SIZE: usize = 2048;
+
 fn main() {
     tauri::Builder::default()
         .setup(|app| {
@@ -23,12 +25,18 @@ fn capture_system_audio(app_handle: tauri::AppHandle) {
         .expect("No output device found");
     let config = device.default_output_config().unwrap();
 
+    let mut batch: Vec<f32> = Vec::with_capacity(BATCH_SIZE);
+
     let stream = device
         .build_input_stream(
             &config.into(),
             move |data: &[f32], _: &cpal::InputCallbackInfo| {
-                let samples: Vec<f32> = data.to_vec();
-                app_handle.emit("audio-data", samples).unwrap();
+                batch.extend_from_slice(data);
+
+                if batch.len() >= BATCH_SIZE {
+                    app_handle.emit("audio-data", batch.clone()).unwrap();
+                    batch.clear();
+                }
             },
             move |err| eprintln!("Stream error: {:?}", err),
             None,

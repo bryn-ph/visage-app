@@ -2,34 +2,24 @@ import { useEffect, useRef } from "react";
 import { AudioEngine } from "../audio/AudioEngine";
 import { listen } from "@tauri-apps/api/event";
 
-
 export default function VisualiserCanvas() {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const audioRef = useRef<AudioEngine | null>(null);
 
-    // CONFIG variables
-    const SMOOTHING_FACTOR = 0.15; // smoothing factor for exponential smoothing (0 to 1)
-    const BAR_WIDTH = 4; // width of each frequency bar in pixels
-    const BAR_SPACING = 2; // spacing between bars in pixels    
-    const BAR_HEIGHT = 0.9; // multiplier for bar height scaling
+    // CONFIG
+    const SMOOTHING_FACTOR = 0.15;
+    const BAR_WIDTH = 4;
+    const BAR_SPACING = 2;
+    const BAR_HEIGHT = 0.9;
 
-    // handle user action to connect system audio
-    // const handleConnectAudio = () => {
-    //     if (audioRef.current) {
-    //         audioRef.current.connectSystemAudio();
-    //     }
-    // };
-
-    // create gradient for bars
     const createGradient = (ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) => {
         const gradient = ctx.createLinearGradient(0, canvas.height, 0, 0);
-        gradient.addColorStop(0, "rgba(15,23,42,0.8)"); // dark blue
-        gradient.addColorStop(0.5, "rgba(56,189,248,0.6)"); // light blue
-        gradient.addColorStop(1, "rgba(255,255,255,0.5)"); // white
+        gradient.addColorStop(0, "rgba(15,23,42,0.8)");
+        gradient.addColorStop(0.5, "rgba(56,189,248,0.6)");
+        gradient.addColorStop(1, "rgba(255,255,255,0.5)");
         return gradient;
     };
 
-    // resize canvas to fill parent container
     const resize = (canvas: HTMLCanvasElement) => {
         const parent = canvas.parentElement!;
         canvas.width = parent.clientWidth;
@@ -44,18 +34,13 @@ export default function VisualiserCanvas() {
         audioRef.current = audio;
 
         resize(canvas);
-        window.addEventListener("resize", () => resize(canvas));
+        const onResize = () => resize(canvas);
+        window.addEventListener("resize", onResize);
 
-        let unlisten: (() => void) | undefined;
-
-        const setupListener = async () => {
-            unlisten = await listen<number[]>("audio-data", (event) => {
-                const samples = new Float32Array(event.payload);
-                audio.pushSamples(samples);
-            });
-        };
-
-        setupListener();
+        // ✅ SINGLE listener, correct type
+        const unlistenPromise = listen<number[]>("audio-data", (event) => {
+            audio.pushSamples(new Float32Array(event.payload));
+        });
 
         const smoothedData = new Float32Array(audio.analyser.frequencyBinCount);
 
@@ -75,10 +60,7 @@ export default function VisualiserCanvas() {
 
             smoothedData.forEach((value, i) => {
                 const normalized = value / 255;
-                const height =
-                    Math.pow(normalized, 0.5) *
-                    canvas.height *
-                    BAR_HEIGHT;
+                const height = Math.pow(normalized, 0.5) * canvas.height * BAR_HEIGHT;
 
                 ctx.fillStyle = gradient;
                 ctx.fillRect(
@@ -93,39 +75,15 @@ export default function VisualiserCanvas() {
         render();
 
         return () => {
-            window.removeEventListener("resize", () => resize(canvas));
-            if (unlisten) unlisten();
+            window.removeEventListener("resize", onResize);
+            unlistenPromise.then((unlisten) => unlisten());
         };
     }, []);
 
-
     return (
-        <>
-            <canvas
-                ref={canvasRef}
-                className="absolute inset-0 block"
-            />
-            {/* <button
-                onClick={handleConnectAudio}
-                className="
-                absolute
-                top-12
-                right-4
-                z-60
-                rounded-lg
-                bg-white/20
-                px-4
-                py-2
-                text-sm
-                font-medium
-                text-white
-                backdrop-blur-md
-                hover:bg-white/30
-                transition
-                "
-            >
-                Share System Audio
-            </button> */}
-        </>
+        <canvas
+            ref={canvasRef}
+            className="absolute inset-0 block"
+        />
     );
 }
