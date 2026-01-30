@@ -1,5 +1,7 @@
 import { useEffect, useRef } from "react";
 import { AudioEngine } from "../audio/AudioEngine";
+import { listen } from "@tauri-apps/api/event";
+
 
 export default function VisualiserCanvas() {
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -12,11 +14,11 @@ export default function VisualiserCanvas() {
     const BAR_HEIGHT = 0.9; // multiplier for bar height scaling
 
     // handle user action to connect system audio
-    const handleConnectAudio = () => {
-        if (audioRef.current) {
-            audioRef.current.connectSystemAudio();
-        }
-    };
+    // const handleConnectAudio = () => {
+    //     if (audioRef.current) {
+    //         audioRef.current.connectSystemAudio();
+    //     }
+    // };
 
     // create gradient for bars
     const createGradient = (ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) => {
@@ -35,16 +37,26 @@ export default function VisualiserCanvas() {
     };
 
     useEffect(() => {
-        const canvas = canvasRef.current!; // get canvas element
-        const ctx = canvas.getContext("2d")!; // get 2D rendering context
-        const audio = new AudioEngine(); // create audio engine instance
+        const canvas = canvasRef.current!;
+        const ctx = canvas.getContext("2d")!;
+        const audio = new AudioEngine();
 
-        // initial resize
+        audioRef.current = audio;
+
         resize(canvas);
         window.addEventListener("resize", () => resize(canvas));
 
-        // store audio engine in ref
-        audioRef.current = audio;
+        let unlisten: (() => void) | undefined;
+
+        const setupListener = async () => {
+            unlisten = await listen<number[]>("audio-data", (event) => {
+                const samples = new Float32Array(event.payload);
+                audio.pushSamples(samples);
+            });
+        };
+
+        setupListener();
+
         const smoothedData = new Float32Array(audio.analyser.frequencyBinCount);
 
         const render = () => {
@@ -53,29 +65,39 @@ export default function VisualiserCanvas() {
             const data = audio.getFrequencyData();
             const gradient = createGradient(ctx, canvas);
 
-            // apply exponential smoothing
             for (let i = 0; i < data.length; i++) {
                 smoothedData[i] =
-                    SMOOTHING_FACTOR * data[i] + (1 - SMOOTHING_FACTOR) * smoothedData[i];
+                    SMOOTHING_FACTOR * data[i] +
+                    (1 - SMOOTHING_FACTOR) * smoothedData[i];
             }
 
-            // clear canvas
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // draw bars
             smoothedData.forEach((value, i) => {
                 const normalized = value / 255;
-                const height = Math.pow(normalized, 0.5) * canvas.height * BAR_HEIGHT;
+                const height =
+                    Math.pow(normalized, 0.5) *
+                    canvas.height *
+                    BAR_HEIGHT;
 
                 ctx.fillStyle = gradient;
-                ctx.fillRect(i * (BAR_WIDTH + BAR_SPACING), canvas.height - height, BAR_WIDTH, height);
+                ctx.fillRect(
+                    i * (BAR_WIDTH + BAR_SPACING),
+                    canvas.height - height,
+                    BAR_WIDTH,
+                    height
+                );
             });
         };
 
         render();
 
-        return () => window.removeEventListener("resize", () => resize(canvas));
+        return () => {
+            window.removeEventListener("resize", () => resize(canvas));
+            if (unlisten) unlisten();
+        };
     }, []);
+
 
     return (
         <>
@@ -83,7 +105,7 @@ export default function VisualiserCanvas() {
                 ref={canvasRef}
                 className="absolute inset-0 block"
             />
-            <button
+            {/* <button
                 onClick={handleConnectAudio}
                 className="
                 absolute
@@ -103,7 +125,7 @@ export default function VisualiserCanvas() {
                 "
             >
                 Share System Audio
-            </button>
+            </button> */}
         </>
     );
 }
