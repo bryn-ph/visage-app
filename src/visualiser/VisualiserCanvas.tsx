@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AudioEngine } from "../audio/AudioEngine";
 import { listen } from "@tauri-apps/api/event";
 
+const STORAGE_KEY = "visage.visualiser.config.v1";
+
 
 type VisualiserConfig = {
     smoothingFactor: number;
@@ -21,10 +23,10 @@ type VisualiserConfig = {
 
 const DEFAULTS: VisualiserConfig = {
     smoothingFactor: 0.2,
-    barWidth: 8,
-    barSpacing: 3,
+    barWidth: 4,
+    barSpacing: 10,
     barHeight: 0.3,
-    trailAlpha: 0.18,
+    trailAlpha: 0.15,
     floor: 0.04,
     gamma: 1.3,
     topPadding: 12,
@@ -34,8 +36,6 @@ const DEFAULTS: VisualiserConfig = {
     bassRange: 140,
     bassBoost: 0.9,
 };
-
-const STORAGE_KEY = "visage.visualiser.config.v1";
 
 const PRESETS: Record<string, VisualiserConfig> = {
     Default: DEFAULTS,
