@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AudioEngine } from "../audio/AudioEngine";
 import { listen } from "@tauri-apps/api/event";
 
 const STORAGE_KEY = "visage.visualiser.config.v1";
-
 
 type VisualiserConfig = {
     smoothingFactor: number;
@@ -39,85 +38,87 @@ const DEFAULTS: VisualiserConfig = {
 
 const PRESETS: Record<string, VisualiserConfig> = {
     Default: DEFAULTS,
-    Crisp: {
-        ...DEFAULTS,
-        smoothingFactor: 0.12,
-        trailAlpha: 0.10,
-        gamma: 1.5,
-        floor: 0.05,
-        barHeight: 0.35,
-    },
-    Smooth: {
-        ...DEFAULTS,
-        smoothingFactor: 0.28,
-        trailAlpha: 0.22,
-        gamma: 1.2,
-        floor: 0.03,
-        barHeight: 0.32,
-    },
-    "Bass Boost": {
-        ...DEFAULTS,
-        bassBoost: 1.4,
-        bassBinPct: 0.12,
-        bassThreshold: 18,
-        bassRange: 110,
-        barHeight: 0.34,
-        gamma: 1.25,
-    },
+    Crisp: { ...DEFAULTS, smoothingFactor: 0.12, trailAlpha: 0.1, gamma: 1.5, floor: 0.05, barHeight: 0.35 },
+    Smooth: { ...DEFAULTS, smoothingFactor: 0.28, trailAlpha: 0.22, gamma: 1.2, floor: 0.03, barHeight: 0.32 },
+    "Bass Boost": { ...DEFAULTS, bassBoost: 1.4, bassBinPct: 0.12, bassThreshold: 18, bassRange: 110, barHeight: 0.34, gamma: 1.25 },
 };
-
 
 function clamp(n: number, min: number, max: number) {
     return Math.min(max, Math.max(min, n));
 }
 
-export default function VisualiserCanvas() {
-    const canvasRef = useRef<HTMLCanvasElement>(null);
-    const [selectedPreset, setSelectedPreset] = useState<string>("Default");
+/**
+ * Keeps a ref synced to the latest value, to avoid stale closures in rAF loops.
+ */
+function useLatestRef<T>(value: T) {
+    const ref = useRef(value);
+    useEffect(() => {
+        ref.current = value;
+    }, [value]);
+    return ref;
+}
 
-    const applyPreset = (name: string) => {
-        const preset = PRESETS[name];
-        if (!preset) return;
-        setConfig(preset);
-    };
-
-
-    // UI state
-    const [open, setOpen] = useState(false);
-    const [config, setConfig] = useState<VisualiserConfig>(() => {
+/**
+ * LocalStorage-backed state (lazy load + persist).
+ */
+function useLocalStorageState<T>(key: string, initial: T) {
+    const [state, setState] = useState<T>(() => {
         try {
-            const raw = localStorage.getItem(STORAGE_KEY);
-            if (!raw) return DEFAULTS;
-            const parsed = JSON.parse(raw) as Partial<VisualiserConfig>;
-            return { ...DEFAULTS, ...parsed };
+            const raw = localStorage.getItem(key);
+            if (!raw) return initial;
+            return { ...(initial as any), ...(JSON.parse(raw) as any) };
         } catch {
-            return DEFAULTS;
+            return initial;
         }
     });
 
-
-
-    // persist config changes
     useEffect(() => {
         try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+            localStorage.setItem(key, JSON.stringify(state));
         } catch {
             // ignore
         }
-    }, [config]);
+    }, [key, state]);
 
+    return [state, setState] as const;
+}
 
-    // render-loop reads from ref
-    const configRef = useRef(config);
+/**
+ * Safer event listener helper.
+ */
+function useEventListener<K extends keyof WindowEventMap>(
+    type: K,
+    handler: (ev: WindowEventMap[K]) => void,
+    enabled = true
+) {
+    const handlerRef = useLatestRef(handler);
+
     useEffect(() => {
-        configRef.current = config;
-    }, [config]);
+        if (!enabled) return;
+        const wrapped = (ev: WindowEventMap[K]) => handlerRef.current(ev);
+        window.addEventListener(type, wrapped);
+        return () => window.removeEventListener(type, wrapped);
+    }, [type, enabled, handlerRef]);
+}
 
-    const setNum = (key: keyof VisualiserConfig, value: number) => {
+export default function VisualiserCanvas() {
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+
+    const [open, setOpen] = useState(false);
+    const [selectedPreset, setSelectedPreset] = useState("Default");
+
+    const [config, setConfig] = useLocalStorageState<VisualiserConfig>(STORAGE_KEY, DEFAULTS);
+    const configRef = useLatestRef(config);
+
+    const setNum = useCallback((key: keyof VisualiserConfig, value: number) => {
         setConfig((prev) => ({ ...prev, [key]: value }));
-    };
+    }, [setConfig]);
 
-    // settings schema for rendering number inputs
+    const applyPreset = useCallback((name: string) => {
+        const preset = PRESETS[name];
+        if (preset) setConfig(preset);
+    }, [setConfig]);
+
     const fields = useMemo(
         () =>
             [
@@ -138,38 +139,45 @@ export default function VisualiserCanvas() {
         []
     );
 
-    // main render loop
-    useEffect(() => {
-        const canvas = canvasRef.current!;
-        const ctx = canvas.getContext("2d")!;
-        const audio = new AudioEngine();
+    // Resize logic as stable callbacks
+    const resizeCanvasToParent = useCallback(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
 
-        const resize = () => {
-            const parent = canvas.parentElement!;
-            const dpr = window.devicePixelRatio || 1;
-            const cssW = parent.clientWidth;
-            const cssH = parent.clientHeight;
-            canvas.width = Math.floor(cssW * dpr);
-            canvas.height = Math.floor(cssH * dpr);
-            canvas.style.width = `${cssW}px`;
-            canvas.style.height = `${cssH}px`;
-        };
+        const parent = canvas.parentElement;
+        if (!parent) return;
+
+        const dpr = window.devicePixelRatio || 1;
+        const cssW = parent.clientWidth;
+        const cssH = parent.clientHeight;
+
+        canvas.width = Math.floor(cssW * dpr);
+        canvas.height = Math.floor(cssH * dpr);
+        canvas.style.width = `${cssW}px`;
+        canvas.style.height = `${cssH}px`;
+    }, []);
+
+    // Keep canvas sized on window resize
+    useEventListener("resize", () => resizeCanvasToParent(), true);
+
+    // Main render loop (single effect)
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+
+        const audio = new AudioEngine();
+        resizeCanvasToParent();
+
+        // One buffer reused
+        const smoothedData = new Float32Array(audio.analyser.frequencyBinCount);
 
         const applyDprTransform = () => {
             const dpr = window.devicePixelRatio || 1;
             ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         };
-
-        resize();
-        applyDprTransform();
-
-        window.addEventListener("resize", resize);
-
-        const unlistenPromise = listen<number[]>("audio-data", (event) => {
-            audio.pushSamples(new Float32Array(event.payload));
-        });
-
-        const smoothedData = new Float32Array(audio.analyser.frequencyBinCount);
 
         const createGradient = (h: number) => {
             const g = ctx.createLinearGradient(0, h, 0, 0);
@@ -179,8 +187,13 @@ export default function VisualiserCanvas() {
             return g;
         };
 
+        let rafId = 0;
+        let disposed = false;
+
         const render = () => {
-            requestAnimationFrame(render);
+            if (disposed) return;
+            rafId = requestAnimationFrame(render);
+
             applyDprTransform();
 
             const cssWidth = canvas.clientWidth;
@@ -203,13 +216,11 @@ export default function VisualiserCanvas() {
 
             const data = audio.getFrequencyData();
 
-            // smoothing
             for (let i = 0; i < data.length; i++) {
-                smoothedData[i] =
-                    smoothingFactor * data[i] + (1 - smoothingFactor) * smoothedData[i];
+                smoothedData[i] = smoothingFactor * data[i] + (1 - smoothingFactor) * smoothedData[i];
             }
 
-            // trail with transparency
+            // trail
             ctx.save();
             if (trailAlpha > 0) {
                 ctx.globalCompositeOperation = "destination-out";
@@ -221,15 +232,13 @@ export default function VisualiserCanvas() {
             ctx.restore();
 
             const available = Math.max(1, cssHeight - topPadding);
-
-            const gradientFill = createGradient(cssHeight);
-            ctx.fillStyle = gradientFill;
+            ctx.fillStyle = createGradient(cssHeight);
 
             const step = barWidth + barSpacing;
             const maxBars = Math.max(1, Math.floor(cssWidth / step));
             const bars = Math.min(smoothedData.length, maxBars);
 
-            // bass energy from low bins
+            // bass
             const bassBins = Math.max(8, Math.floor(smoothedData.length * bassBinPct));
             let bassSum = 0;
             for (let i = 0; i < bassBins; i++) bassSum += smoothedData[i];
@@ -240,15 +249,11 @@ export default function VisualiserCanvas() {
 
             for (let i = 0; i < bars; i++) {
                 const value = smoothedData[i];
-
                 let normalized = value / 255;
 
-                // noise floor gate
                 normalized = Math.max(0, (normalized - floor) / (1 - floor));
-
                 const contrasted = Math.pow(normalized, gamma);
 
-                // weight lows higher
                 const t = i / Math.max(1, bars - 1);
                 const lowWeight = 1.6 - t * 0.9;
 
@@ -260,19 +265,23 @@ export default function VisualiserCanvas() {
             }
         };
 
+        const unlistenPromise = listen<number[]>("audio-data", (event) => {
+            audio.pushSamples(new Float32Array(event.payload));
+        });
+
         render();
 
         return () => {
-            window.removeEventListener("resize", resize);
-            unlistenPromise.then((unlisten) => unlisten());
+            disposed = true;
+            cancelAnimationFrame(rafId);
+            unlistenPromise.then((unlisten) => unlisten()).catch(() => { });
         };
-    }, []);
+    }, [configRef, resizeCanvasToParent]);
 
     return (
         <>
             <canvas ref={canvasRef} className="absolute inset-0 block" />
 
-            {/* Settings button */}
             <button
                 onClick={() => setOpen((v) => !v)}
                 className="
@@ -286,7 +295,6 @@ export default function VisualiserCanvas() {
                 {open ? "Close Settings" : "Settings"}
             </button>
 
-            {/* Panel */}
             {open && (
                 <div
                     className="
@@ -314,11 +322,11 @@ export default function VisualiserCanvas() {
                                 value={selectedPreset}
                                 onChange={(e) => setSelectedPreset(e.target.value)}
                                 className="
-        flex-1 rounded-md bg-white/10
-        border border-white/10
-        px-2 py-2 text-sm text-white
-        outline-none focus:border-white/25
-      "
+                  flex-1 rounded-md bg-white/10
+                  border border-white/10
+                  px-2 py-2 text-sm text-white
+                  outline-none focus:border-white/25
+                "
                             >
                                 {Object.keys(PRESETS).map((name) => (
                                     <option key={name} value={name} className="bg-slate-900">
@@ -330,16 +338,15 @@ export default function VisualiserCanvas() {
                             <button
                                 onClick={() => applyPreset(selectedPreset)}
                                 className="
-        rounded-md bg-white/20 px-3 py-2
-        text-sm font-medium text-white
-        hover:bg-white/30 transition
-      "
+                  rounded-md bg-white/20 px-3 py-2
+                  text-sm font-medium text-white
+                  hover:bg-white/30 transition
+                "
                             >
                                 Apply
                             </button>
                         </div>
                     </div>
-
 
                     <div className="space-y-3 max-h-[60vh] overflow-auto pr-1">
                         {fields.map((f) => {
