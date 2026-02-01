@@ -101,7 +101,7 @@ function useEventListener<K extends keyof WindowEventMap>(
     }, [type, enabled, handlerRef]);
 }
 
-export default function VisualiserCanvas() {
+export default function VisualiserCanvas({ locked }: { locked: boolean }) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
 
     const [open, setOpen] = useState(false);
@@ -284,13 +284,16 @@ export default function VisualiserCanvas() {
 
             <button
                 onClick={() => setOpen((v) => !v)}
-                className="
+                disabled={locked}
+                className={`
           absolute top-12 right-4 z-60
           rounded-lg bg-white/20 px-3 py-2
           text-sm font-medium text-white
           backdrop-blur-md hover:bg-white/30
           transition
-        "
+          ${locked ? "opacity-40 cursor-not-allowed" : ""}
+        `}
+                title={locked ? "Unlock (Ctrl+Shift+L) to use settings" : undefined}
             >
                 {open ? "Close Settings" : "Settings"}
             </button>

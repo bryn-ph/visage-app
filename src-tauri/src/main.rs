@@ -10,11 +10,7 @@ fn main() {
     tauri::Builder::default()
         .setup(|app| {
             let handle = app.handle().clone();
-
-            std::thread::spawn(move || {
-                capture_system_audio(handle);
-            });
-
+            std::thread::spawn(move || capture_system_audio(handle));
             Ok(())
         })
         .run(tauri::generate_context!())
