@@ -3,7 +3,6 @@ import { AudioEngine } from "../audio/AudioEngine";
 import { listen } from "@tauri-apps/api/event";
 
 const STORAGE_KEY = "visage.visualiser.config.v1";
-
 type VisualiserConfig = {
     smoothingFactor: number;
     barWidth: number;
@@ -18,6 +17,10 @@ type VisualiserConfig = {
     bassThreshold: number;
     bassRange: number;
     bassBoost: number;
+
+    barColorBottom: string;
+    barColorMid: string;
+    barColorTop: string;
 };
 
 const DEFAULTS: VisualiserConfig = {
@@ -33,15 +36,42 @@ const DEFAULTS: VisualiserConfig = {
     bassBinPct: 0.08,
     bassThreshold: 25,
     bassRange: 140,
-    bassBoost: 0.9,
+    bassBoost: 1.4,
+
+    barColorBottom: "#0f172a",
+    barColorMid: "#38bdf8",
+    barColorTop: "#ffffff",
 };
 
 const PRESETS: Record<string, VisualiserConfig> = {
     Default: DEFAULTS,
-    Crisp: { ...DEFAULTS, smoothingFactor: 0.12, trailAlpha: 0.1, gamma: 1.5, floor: 0.05, barHeight: 0.35 },
-    Smooth: { ...DEFAULTS, smoothingFactor: 0.28, trailAlpha: 0.22, gamma: 1.2, floor: 0.03, barHeight: 0.32 },
-    "Bass Boost": { ...DEFAULTS, bassBoost: 1.4, bassBinPct: 0.12, bassThreshold: 18, bassRange: 110, barHeight: 0.34, gamma: 1.25 },
+    Crisp: {
+        ...DEFAULTS,
+        smoothingFactor: 0.12,
+        trailAlpha: 0.1,
+        gamma: 1.5,
+        floor: 0.05,
+        barHeight: 0.35,
+    },
+    Smooth: {
+        ...DEFAULTS,
+        smoothingFactor: 0.28,
+        trailAlpha: 0.22,
+        gamma: 1.2,
+        floor: 0.03,
+        barHeight: 0.32,
+    },
+    "Bass Boost": {
+        ...DEFAULTS,
+        bassBoost: 2,
+        bassBinPct: 0.12,
+        bassThreshold: 18,
+        bassRange: 110,
+        barHeight: 0.34,
+        gamma: 1.25,
+    },
 };
+
 
 function clamp(n: number, min: number, max: number) {
     return Math.min(max, Math.max(min, n));
@@ -114,10 +144,28 @@ export default function VisualiserCanvas({ locked }: { locked: boolean }) {
         setConfig((prev) => ({ ...prev, [key]: value }));
     }, [setConfig]);
 
-    const applyPreset = useCallback((name: string) => {
-        const preset = PRESETS[name];
-        if (preset) setConfig(preset);
-    }, [setConfig]);
+    const setStr = useCallback(
+        (key: keyof VisualiserConfig, value: string) => {
+            setConfig((prev) => ({ ...prev, [key]: value as any }));
+        },
+        [setConfig]
+    );
+
+    const applyPreset = useCallback(
+        (name: string) => {
+            const preset = PRESETS[name];
+            if (!preset) return;
+
+            setConfig((prev) => ({
+                ...preset,
+                barColorBottom: prev.barColorBottom,
+                barColorMid: prev.barColorMid,
+                barColorTop: prev.barColorTop,
+            }));
+        },
+        [setConfig]
+    );
+
 
     const fields = useMemo(
         () =>
@@ -180,10 +228,12 @@ export default function VisualiserCanvas({ locked }: { locked: boolean }) {
         };
 
         const createGradient = (h: number) => {
+            const { barColorBottom, barColorMid, barColorTop } = configRef.current;
+
             const g = ctx.createLinearGradient(0, h, 0, 0);
-            g.addColorStop(0, "rgba(15,23,42,0.8)");
-            g.addColorStop(0.5, "rgba(56,189,248,0.6)");
-            g.addColorStop(1, "rgba(255,255,255,0.5)");
+            g.addColorStop(0, barColorBottom);
+            g.addColorStop(0.5, barColorMid);
+            g.addColorStop(1, barColorTop);
             return g;
         };
 
@@ -318,8 +368,44 @@ export default function VisualiserCanvas({ locked }: { locked: boolean }) {
                         </button>
                     </div>
 
+                    <div className="mb-4 space-y-2">
+                        <div className="text-sm text-white/70">Bar colours</div>
+
+                        <div className="grid grid-cols-3 gap-2">
+                            <label className="flex flex-col gap-1">
+                                <span className="text-[11px] text-white/60">Bottom</span>
+                                <input
+                                    type="color"
+                                    value={config.barColorBottom}
+                                    onChange={(e) => setStr("barColorBottom", e.target.value)}
+                                    className="h-9 w-full rounded bg-white/10 border border-white/10"
+                                />
+                            </label>
+
+                            <label className="flex flex-col gap-1">
+                                <span className="text-[11px] text-white/60">Mid</span>
+                                <input
+                                    type="color"
+                                    value={config.barColorMid}
+                                    onChange={(e) => setStr("barColorMid", e.target.value)}
+                                    className="h-9 w-full rounded bg-white/10 border border-white/10"
+                                />
+                            </label>
+
+                            <label className="flex flex-col gap-1">
+                                <span className="text-[11px] text-white/60">Top</span>
+                                <input
+                                    type="color"
+                                    value={config.barColorTop}
+                                    onChange={(e) => setStr("barColorTop", e.target.value)}
+                                    className="h-9 w-full rounded bg-white/10 border border-white/10"
+                                />
+                            </label>
+                        </div>
+                    </div>
+
                     <div className="mb-3 space-y-2">
-                        <div className="text-xs text-white/70">Presets</div>
+                        <div className="text-sm text-white/70">Presets</div>
                         <div className="flex gap-2">
                             <select
                                 value={selectedPreset}
